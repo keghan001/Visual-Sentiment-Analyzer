@@ -1,4 +1,4 @@
 .vscode/
 # Ignoring datasets
-dataset/
+dataset/*
 !dataset/README.txt
