@@ -1,6 +1,9 @@
+from pathlib import Path
+import torch
 import torch.nn as nn
 from transformers import BertModel
 from torchvision import models as vision_models
+from meld_data_loader import MELDDataset
 
 class TextEncoder(nn.Module):
     def __init__(self) -> None:
@@ -12,15 +15,15 @@ class TextEncoder(nn.Module):
             param.requires_grad = False
             
         self.projection = nn.Linear(768, 128)
+    
+    def forward(self, input_ids, attention_mask):
+        #Extract BERT embeddings
+        outputs = self.bert(input_ids= input_ids, attention_mask= attention_mask)
         
-        def forward(self, input_ids, attention_mask):
-            #Extract BERT embeddings
-            outputs = self.bert(input_ids= input_ids, attention_mask= attention_mask)
-            
-            #Use [CLS] token representation
-            pooler_out = outputs.pooler_output
-            
-            return self.projection(pooler_out)
+        #Use [CLS] token representation
+        pooler_out = outputs.pooler_output
+        
+        return self.projection(pooler_out)
         
 class VideoEncoder(nn.Module):
     def __init__(self) -> None:
@@ -33,7 +36,7 @@ class VideoEncoder(nn.Module):
         
         num_fts = self.backbone.fc.in_features
         
-        self.head = nn.Sequential(
+        self.backbone.fc = nn.Sequential( #type: ignore
             nn.Linear(num_fts, 128),
             nn.ReLU(),
             nn.Dropout(0.2)
@@ -41,9 +44,7 @@ class VideoEncoder(nn.Module):
         
     def forward(self, x):
         x = x.transpose(1,2)
-        features = self.backbone(x)
-        return self.head(features)
-    
+        return self.backbone(x)
 
 class AudioEncoder(nn.Module):
     def __init__(self) -> None:
@@ -78,3 +79,98 @@ class AudioEncoder(nn.Module):
         # Features output: [batch_size, 128, 1]
         
         return self.proj_layers(features.squeeze(-1))
+
+
+class MultimodalSentimentModel(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        
+        self.text_encoder = TextEncoder()
+        self.video_encoder = VideoEncoder()
+        self.audio_encoder = AudioEncoder()
+        
+        self.fusion_layer = nn.Sequential(
+            nn.Linear(128*3, 256),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            nn.Dropout(0.3)
+        )
+        
+        self.emotion_classifier = nn.Sequential(
+            nn.Linear(256, 64),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(64, 7)
+        )
+        
+        self.sentiment_classifier = nn.Sequential(
+            nn.Linear(256, 64),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(64, 3) # Negative, Neutral, Positive
+        )
+    
+    def forward(self, text_input, video_frames, audio_features):
+        text_features = self.text_encoder(
+            text_input['input_ids'],
+            text_input['attention_mask']
+        )
+        
+        video_features = self.video_encoder(video_frames)
+        audio_features = self.audio_encoder(audio_features)
+        
+        # Concatenate multimodal features
+        combined_features = torch.cat([
+            text_features,
+            video_features,
+            audio_features
+        ], dim=1) # [batch_size, 128 * 3]      
+        
+        # Fusion layer
+        fused_feats = self.fusion_layer(combined_features)
+        
+        emotion_output = self.emotion_classifier(fused_feats)
+        sentiment_output = self.sentiment_classifier(fused_feats)
+        
+        return {
+            'emotions': emotion_output,
+            'sentiments': sentiment_output
+        }
+        
+if __name__ == "__main__":
+    dataset = MELDDataset(Path('../dataset/train/train_sent_emo.csv'),
+                    Path('../dataset/train/train_splits'))
+    
+    sample = dataset[0]
+    
+    model = MultimodalSentimentModel()
+    model.eval()
+    
+    text_inputs = {
+        'input_ids': sample['text_inputs']['input_ids'].unsqueeze(0), #type: ignore
+        'attention_mask': sample['text_inputs']['attention_mask'].unsqueeze(0) #type: ignore
+    }
+    
+    video_frames = sample['video_frames'].unsqueeze(0)  #type: ignore
+    audio_frames = sample['audio_features'].unsqueeze(0) #type: ignore
+    
+    with torch.inference_mode():
+        outputs = model(text_inputs, video_frames, audio_frames)
+        
+        emotion_preds = torch.softmax(outputs['emotions'], dim=1)[0]
+        sentiment_preds = torch.softmax(outputs['sentiments'], dim=1)[0]
+    
+    emotion_map = {
+        0: 'anger', 1: 'disgust', 2: 'fear', 3: 'joy',
+        4: 'neutral', 5: 'sadness', 6: 'surprise'
+    }
+    
+    sentiment_map = {
+        0: 'negative', 1: 'neutral', 2: 'positive'
+    }   
+    
+    for i, prob in enumerate(emotion_preds):
+        print(f"Predicted Emotion: {emotion_map[i]}: {prob:.2f}")
+        
+    for i, prob in enumerate(sentiment_preds):
+        print(f"Predicted Sentiment: {sentiment_map[i]}: {prob:.2f}")
