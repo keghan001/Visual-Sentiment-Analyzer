@@ -1,6 +1,6 @@
 import torch.nn as nn
 from transformers import BertModel
-
+from torchvision import models as vision_models
 
 class TextEncoder(nn.Module):
     def __init__(self) -> None:
@@ -21,3 +21,23 @@ class TextEncoder(nn.Module):
             pooler_out = outputs.pooler_output
             
             return self.projection(pooler_out)
+        
+class VideoEncoder(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.backbone = vision_models.video.r3d_18(pretrained=True)
+        
+        #Preventing pretrained model from being trained
+        for param in self.backbone.parameters():
+            param.requires_grad = False
+        
+        num_fts = self.backbone.fc.in_features
+        self.backbone.fc = nn.Sequential( #type: ignore
+            nn.Linear(num_fts, 128),
+            nn.ReLU(),
+            nn.Dropout(0.2)
+        )
+        
+    def forward(self, x):
+        x = x.transpose(1,2)
+        return self.backbone(x)
