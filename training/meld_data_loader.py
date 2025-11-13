@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 from pathlib import Path
 from transformers import AutoTokenizer
@@ -63,7 +63,10 @@ class MELDDataset(Dataset):
         
         #Pad or truncate frames
         if len(frames) < 30:
-            frames += np.zeros_like(frames[0]) * (30 -len(frames))
+            # frames += np.zeros_like(frames[0]) * (30 -len(frames))
+            pad_count = 30 - len(frames)
+            pad_frames = [np.zeros_like(frames[0]) for _ in range(pad_count)]
+            frames.extend(pad_frames)
         else:
             frames = frames[:30]
         
@@ -84,66 +87,127 @@ class MELDDataset(Dataset):
                 '-ac', '1', 
                 audio_path
             ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+            #loading audio formats with torch
+            waveform, sample_rate = torchaudio.load(audio_path)
+            
+            if sample_rate != 16000:
+                resampler = torchaudio.transforms.Resample(sample_rate, 16000)
+                waveform = resampler(waveform)
+            
+            #Transforming waveform -> melspectogram
+            mel_spectogram = torchaudio.transforms.MelSpectrogram(
+                sample_rate=16000,
+                n_mels=64,
+                n_fft=1024,
+                hop_length=512
+            )
+            
+            mel_spec = mel_spectogram(waveform)
+            
+            #Normalize
+            mel_spec = (mel_spec - mel_spec.mean()) / mel_spec.std()
+            
+            if mel_spec.size(2) < 300:
+                padding = 300 - mel_spec.size(2)
+                mel_spec = torch.nn.functional.pad(mel_spec, (0, padding))
+            else:
+                mel_spec = mel_spec[:, :, :300]
+            
+            return mel_spec
+        except subprocess.CalledProcessError as se:
+            raise ValueError(f"Audio extraction error: {str(se)}")
         except Exception as e:
             raise ValueError(f"Audio error {str(e)}")
-        
-        #loading audio formats with torch
-        waveform, sample_rate = torchaudio.load(audio_path)
-        
-        if sample_rate != 16000:
-            resampler = torchaudio.transforms.Resample(sample_rate, 16000)
-            waveform = resampler(waveform)
-        
-        #Transforming waveform -> melspectogram
-        mel_spectogram = torchaudio.transforms.MelSpectrogram(
-            sample_rate=16000,
-            n_mels=64,
-            n_fft=1024,
-            hop_length=512
-        )
-        
-        mel_spec = mel_spectogram(waveform)
-        
-        #Normalize
-        mel_spec = (mel_spec - mel_spec.mean()) / mel_spec.std()
-        
-        if mel_spec.size(2) < 300:
-            padding = 300 - mel_spec.size(2)
-            mel_spec = torch.nn.functional.pad(mel_spec, (0, padding))
-        else:
-            mel_spec = mel_spec[:, :, :300]
+        finally:
+            if audio_path.exists():
+                audio_path.unlink()
     
     def __len__(self):
         return len(self.data)
     
     def __getitem__(self, index):
-        row = self.data.iloc[index]
-        video_filename = f"""dia{row['Dialogue_ID']}_utt{row['Utterance_ID']}.mp4"""
+        if isinstance(index, torch.Tensor):
+            index = index.item()
+        row = self.data.iloc[index]     # type: ignore
         
-        vid_path = Path(self.video_dir) / video_filename
-        
-        if vid_path.exists() == False:
-            raise FileNotFoundError(f"Video file {vid_path} not available")
-        
-        text_inputs = self.tokenizer(row['Utterance'],
-                                    padding='max_length',
-                                    truncation=True,
-                                    max_length=128,
-                                    return_tensors='pt')
-        
-        # video_frames = self._load_video_frames(vid_path)
-        self._extract_audio_features(vid_path)
-        
-        # print(video_frames)
+        try:
+            video_filename = f"""dia{row['Dialogue_ID']}_utt{row['Utterance_ID']}.mp4"""
+            
+            vid_path = Path(self.video_dir) / video_filename
+            
+            if vid_path.exists() == False:
+                raise FileNotFoundError(f"Video file {vid_path} not available")
+            
+            text_inputs = self.tokenizer(row['Utterance'],
+                                        padding='max_length',
+                                        truncation=True,
+                                        max_length=128,
+                                        return_tensors='pt')
+            
+            video_frames = self._load_video_frames(vid_path)
+            audio_features = self._extract_audio_features(vid_path)
+            # print(audio_features)
+            
+            #Map sentiment and emotion labels
+            emotion_label = self.emotion_map.get(row['Emotion'].lower(), 0)
+            sentiment_label = self.sentiment_map.get(row['Sentiment'].lower(), 0)
+            
+            return {
+                'text_inputs': {
+                    'input_ids': text_inputs['input_ids'].squeeze(),
+                    'attention_mask': text_inputs['attention_mask'].squeeze()
+                },
+                'video_frames': video_frames,
+                'audio_features': audio_features,
+                'emotion_label': torch.tensor(emotion_label),
+                'sentiment_label': torch.tensor(sentiment_label)
+            }
+        except Exception as e:
+            print(f"Error processing {vid_path} {str(e)}")
+            return None
+
+def collate_fn(batch):
+    #Filter out None samples
+    batch = list(filter(None, batch))
+    return torch.utils.data.default_collate(batch)  
+
+def prepare_dataloaders(train_csv, train_video_dir,
+                        dev_csv, dev_video_dir,
+                        test_csv, test_video_dir, batch_size=32):
+    train_dataset = MELDDataset(train_csv, train_video_dir)
+    dev_dataset = MELDDataset(dev_csv, dev_video_dir)
+    test_dataset = MELDDataset(test_csv, test_video_dir)
+    
+    train_loader = DataLoader(train_dataset,
+                            batch_size=batch_size,
+                            shuffle=True,
+                            collate_fn=collate_fn)
+    
+    dev_loader = DataLoader(dev_dataset,
+                            batch_size=batch_size,
+                            collate_fn=collate_fn)
+    
+    test_loader = DataLoader(test_dataset,
+                            batch_size=batch_size,
+                            collate_fn=collate_fn)
+    
+    return train_loader, dev_loader, test_loader
 
 def main() -> None:
-    csv_path = Path('../dataset/dev/dev_sent_emo.csv')
-    vid_dir = Path('../dataset/dev/dev_splits_complete')
-    meld = MELDDataset(csv_path, vid_dir)
+    train_loader, dev_loader, test_loader = prepare_dataloaders(
+        Path('../dataset/train/train_sent_emo.csv'), Path('../dataset/train/train_splits'),
+        Path('../dataset/dev/dev_sent_emo.csv'), Path('../dataset/dev/dev_splits_complete'),
+        Path('../dataset/test/test_sent_emo.csv'), Path('../dataset/test/output_repeated_splits_test'),
+    )
     
-    
-    print(meld[0])
-    
+    for batch in train_loader:
+        print(batch['text_inputs'])
+        print(batch['video_frames'].shape)
+        print(batch['audio_features'].shape)
+        print(batch['emotion_label'])
+        print(batch['sentiment_label'])
+        break
 
 if __name__ == "__main__":
     main()
