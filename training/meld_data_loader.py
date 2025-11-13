@@ -5,6 +5,8 @@ import pandas as pd
 from pathlib import Path
 from transformers import AutoTokenizer
 import cv2
+import subprocess
+import torchaudio
 
 
 class MELDDataset(Dataset):
@@ -23,7 +25,7 @@ class MELDDataset(Dataset):
         }
         
     def _load_video_frames (self, video_dir):
-        vid_width = 244
+        vid_width = 224
         vid_height = 224
         cap = cv2.VideoCapture(video_dir)
         frames = []
@@ -69,6 +71,48 @@ class MELDDataset(Dataset):
         #After permute(): [frames, channels, height, width]
         return torch.FloatTensor(np.array(frames)).permute(0, 3, 1, 2)
     
+    def _extract_audio_features(self, video_dir: Path):
+        audio_path = video_dir.with_suffix('.wav')
+        
+        try:
+            subprocess.run([
+                'ffmpeg',
+                '-i', video_dir,
+                '-vn',
+                '-acodec', 'pcm_s16le',
+                '-ar', '16000', 
+                '-ac', '1', 
+                audio_path
+            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as e:
+            raise ValueError(f"Audio error {str(e)}")
+        
+        #loading audio formats with torch
+        waveform, sample_rate = torchaudio.load(audio_path)
+        
+        if sample_rate != 16000:
+            resampler = torchaudio.transforms.Resample(sample_rate, 16000)
+            waveform = resampler(waveform)
+        
+        #Transforming waveform -> melspectogram
+        mel_spectogram = torchaudio.transforms.MelSpectrogram(
+            sample_rate=16000,
+            n_mels=64,
+            n_fft=1024,
+            hop_length=512
+        )
+        
+        mel_spec = mel_spectogram(waveform)
+        
+        #Normalize
+        mel_spec = (mel_spec - mel_spec.mean()) / mel_spec.std()
+        
+        if mel_spec.size(2) < 300:
+            padding = 300 - mel_spec.size(2)
+            mel_spec = torch.nn.functional.pad(mel_spec, (0, padding))
+        else:
+            mel_spec = mel_spec[:, :, :300]
+    
     def __len__(self):
         return len(self.data)
     
@@ -87,16 +131,19 @@ class MELDDataset(Dataset):
                                     max_length=128,
                                     return_tensors='pt')
         
-        video_frames = self._load_video_frames(vid_path)
+        # video_frames = self._load_video_frames(vid_path)
+        self._extract_audio_features(vid_path)
         
-        print(video_frames)
+        # print(video_frames)
 
-
-
-if __name__ == "__main__":
+def main() -> None:
     csv_path = Path('../dataset/dev/dev_sent_emo.csv')
     vid_dir = Path('../dataset/dev/dev_splits_complete')
     meld = MELDDataset(csv_path, vid_dir)
     
-    print(meld[3])
     
+    print(meld[0])
+    
+
+if __name__ == "__main__":
+    main()
