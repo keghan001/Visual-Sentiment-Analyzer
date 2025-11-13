@@ -108,6 +108,7 @@ class MELDDataset(Dataset):
             #Normalize
             mel_spec = (mel_spec - mel_spec.mean()) / mel_spec.std()
             
+            # Spectogram stucture: [batch_size, channel, freq, time] -> [batch_size, freq, time] 
             if mel_spec.size(2) < 300:
                 padding = 300 - mel_spec.size(2)
                 mel_spec = torch.nn.functional.pad(mel_spec, (0, padding))
