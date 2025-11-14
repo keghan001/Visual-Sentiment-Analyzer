@@ -7,13 +7,14 @@ from transformers import AutoTokenizer
 import cv2
 import subprocess
 import torchaudio
+from typing import Union
 
 
 class MELDDataset(Dataset):
-    def __init__(self, csv_path: Path, video_dir: Path) -> None:
-        self.data = pd.read_csv(csv_path)
+    def __init__(self, csv_path: Union[Path, str], video_dir: Union[Path, str]) -> None:
+        self.data = pd.read_csv(Path(csv_path))
         
-        self.video_dir = video_dir
+        self.video_dir = Path(video_dir)
         self.tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
         
         self.emotion_map = {
@@ -74,8 +75,8 @@ class MELDDataset(Dataset):
         #After permute(): [frames, channels, height, width]
         return torch.FloatTensor(np.array(frames)).permute(0, 3, 1, 2)
     
-    def _extract_audio_features(self, video_dir: Path):
-        audio_path = video_dir.with_suffix('.wav')
+    def _extract_audio_features(self, video_dir):
+        audio_path = Path(video_dir).with_suffix('.wav')
         
         try:
             subprocess.run([

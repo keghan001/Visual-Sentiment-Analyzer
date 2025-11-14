@@ -138,7 +138,7 @@ class MultimodalSentimentModel(nn.Module):
         }
         
 if __name__ == "__main__":
-    dataset = MELDDataset(Path('../dataset/train/train_sent_emo.csv'),
+    dataset = MELDDataset('../dataset/train/train_sent_emo.csv',
                     Path('../dataset/train/train_splits'))
     
     sample = dataset[0]
