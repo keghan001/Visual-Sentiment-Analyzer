@@ -223,9 +223,9 @@ class MultimodalTrainer():
             return {k: v/len(self.train_loader) for k, v in running_loss.items()}
         
         
-    def validate(self):
+    def validate(self, data_loader, phase='val'):
         self.model.eval()
-        val_loss = {'total': 0, 'emotion': 0, 'sentiment': 0}
+        losses = {'total': 0, 'emotion': 0, 'sentiment': 0}
         all_emotion_preds = []
         all_emotion_labels = []
         all_sentiment_preds = []
@@ -262,11 +262,11 @@ class MultimodalTrainer():
                 all_sentiment_labels.extend(emotion_labels.gpu().numpy())
                 
                 # Track losses
-                val_loss['total'] += total_loss.item()
-                val_loss['emotion'] += emotion_loss.item()
-                val_loss['sentiment'] += sentiment_loss.item()
+                losses['total'] += total_loss.item()
+                losses['emotion'] += emotion_loss.item()
+                losses['sentiment'] += sentiment_loss.item()
                 
-        avg_loss = {k: v/len(self.val_loader) for k, v in val_loss.items()}
+        avg_loss = {k: v/len(data_loader) for k, v in losses.items()}
         
         # Compute the precision and accuracy
         emotion_precision = precision_score(
@@ -278,7 +278,8 @@ class MultimodalTrainer():
         sentiment_accuracy = accuracy_score(
             all_sentiment_labels, all_sentiment_preds)
         
-        self.scheduler.step(avg_loss['total'])
+        if phase == "val":
+            self.scheduler.step(avg_loss['total'])
         
         return avg_loss, {
             'emotion_precision': emotion_precision,
