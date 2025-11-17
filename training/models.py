@@ -3,8 +3,12 @@ import torch
 import torch.nn as nn
 from transformers import BertModel
 from torchvision import models as vision_models
-from meld_data_loader import MELDDataset
 from sklearn.metrics import precision_score, accuracy_score
+from torch.utils.tensorboard.writer import SummaryWriter
+from datetime import datetime
+import os
+
+from meld_data_loader import MELDDataset
 
 class TextEncoder(nn.Module):
     def __init__(self) -> None:
@@ -150,8 +154,13 @@ class MultimodalTrainer():
         print("\nDataset sizes: ")
         print(f"Training samples: {train_size:,}")
         print(f"Validation samples: {val_size:,}")
-        print(f"Batches per epochs: {len(train_loader):,}")
         
+        timestamp = datetime.now().strftime('%Y/%m/%d-%H:%M:%S') #2023/12/1-02:20:12
+        base_dir = '/opt/ml/output/tensorboard' if 'SM_MODEL_DIR' in os.environ else 'runs'
+        log_dir = f"{base_dir}/run_{timestamp}"
+        self.writer = SummaryWriter(log_dir=log_dir)
+        self.global_step = 0
+                
         #Optimizer initialization
         self.optimizer = torch.optim.Adam([
             {'params': model.text_encoder.parameters(), 'lr': 8e-6},
@@ -169,6 +178,8 @@ class MultimodalTrainer():
             patience=2
         )
         
+        self.current_train_losses = None
+        
         # Label smoothing to optimize generalization
         self.emotion_criterion = nn.CrossEntropyLoss(
             label_smoothing=0.05
@@ -177,6 +188,13 @@ class MultimodalTrainer():
         self.sentiment_criterion = nn.CrossEntropyLoss(
             label_smoothing=0.05
         )
+        
+    def log_metrics(self, losses, metrics=None, phase='train'):
+        if phase == "train":
+            self.current_train_losses = losses
+        else: # Validation phase
+            self.writer.add_scalar(
+                'loss/total/train', self.current_train_losses['total'], self.global_step) #type: ignore
         
     def train_epoch(self):
         self.model.train()
@@ -220,7 +238,9 @@ class MultimodalTrainer():
             running_loss['emotion'] += emotion_loss.item()
             running_loss['sentiment'] += sentiment_loss.item()
             
-            return {k: v/len(self.train_loader) for k, v in running_loss.items()}
+            self.global_step += 1
+            
+        return {k: v/len(self.train_loader) for k, v in running_loss.items()}
         
         
     def validate(self, data_loader, phase='val'):
