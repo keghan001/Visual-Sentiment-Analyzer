@@ -2,3 +2,6 @@
 # Ignoring datasets
 dataset/*
 !dataset/README.txt
+
+training/__pycache__
+runs/
