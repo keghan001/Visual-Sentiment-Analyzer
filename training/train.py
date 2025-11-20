@@ -81,7 +81,7 @@ def main():
         'epochs': []
     }
     
-    for epoch in tqdm(range(args.eppochs), desc="Epochs"):
+    for epoch in tqdm(range(args.epochs), desc="Epochs"):
         train_loss = trainer.train_epoch()
         val_loss, val_metrics = trainer.validate(dev_loader)
         
