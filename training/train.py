@@ -1,14 +1,12 @@
 import argparse
 import json
-import os
-import sys 
+import os 
 import torch
 import torchaudio
 from tqdm import tqdm
 
 from meld_data_loader import prepare_dataloaders
 from models import MultimodalSentimentModel, MultimodalTrainer
-from install_ffmpeg import instal_ffmpeg
 
 #AWS SageMaker
 SM_MODEL_DIR = os.environ.get('SM_MODEL_DIR', ".")
@@ -37,9 +35,6 @@ def parse_args():
 
 def main():
     #Ffmpeg install
-    if not instal_ffmpeg():
-        print("Error: FFmpeg installation failed. Cannot continue training.")
-        sys.exit()
     
     print("Available audio backends: ")
     print(str(torchaudio.list_audio_backends()))
