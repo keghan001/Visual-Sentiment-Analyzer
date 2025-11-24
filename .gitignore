@@ -5,3 +5,4 @@ dataset/*
 
 training/__pycache__
 runs/
+.env
