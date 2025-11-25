@@ -15,22 +15,24 @@ def install_ffmpeg():
                                 "install", "ffmpeg-python"])
         print("Ffmpeg-python installed")
     except subprocess.CalledProcessError as e:
-        print("Ffmpeg installation failed {e}")
+        print(f"Ffmpeg installation failed {e}")
         
     try:
         subprocess.check_call([
             "wget",
-            "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-arm64-static.tar.xz",
+            "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-i686-static.tar.xz",
             "-O", "/tmp/ffmpeg.tar.xz"
         ])
         
         subprocess.check_call(
             ["tar", "-xf", "/tmp/ffmpeg.tar.xz", "-C", "/tmp/"])
         
-        ffmpeg_path = subprocess.check_output(
-            ["tar", "-xf", "/tmp", "-name", "ffmpeg", "-type", "f"],
+        result = subprocess.run(
+            ["find", "/tmp", "-name", "ffmpeg", "-type", "f"],
+            capture_output=True,
             text=True
-        ).strip()
+        )
+        ffmpeg_path = result.stdout.strip()
         
         subprocess.check_call(["cp", ffmpeg_path, "/usr/local/bin/ffmpeg"])
         
@@ -39,10 +41,10 @@ def install_ffmpeg():
         print("Installed static Ffmpeg binary")
         
     except subprocess.CalledProcessError as e:
-        print("Failed to install static FFmpeg {e}")
+        print(f"Failed to install static FFmpeg {e}")
     
     try:
-        result = subprocess.run(["ffmpeg", "--version"], capture_output=True, text=True, check=True)
+        result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, check=True)
         print("FFmpeg version:")
         print(result.stdout)
         return True

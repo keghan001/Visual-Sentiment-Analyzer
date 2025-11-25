@@ -246,9 +246,9 @@ class MultimodalTrainer():
             
             # Calculating losses using raw logits
             emotion_loss = self.emotion_criterion(
-                outputs['emotion'], emotion_labels)
+                outputs['emotions'], emotion_labels)
             sentiment_loss = self.sentiment_criterion(
-                outputs['sentiment'], sentiment_labels)
+                outputs['sentiments'], sentiment_labels)
             total_loss = emotion_loss + sentiment_loss
             
             # Backward pass. Gradient descent
@@ -289,8 +289,8 @@ class MultimodalTrainer():
             for batch in self.val_loader:
                 device = next(self.model.parameters()).device
                 text_inputs = {
-                'input_ids': batch['text_input']['input_ids'].to(device),
-                'attention_mask': batch['text_input']['attention_mask'].to(device)
+                'input_ids': batch['text_inputs']['input_ids'].to(device),
+                'attention_mask': batch['text_inputs']['attention_mask'].to(device)
             }
                 video_frames = batch['video_frames'].to(device)
                 audio_features = batch['audio_features'].to(device)

@@ -12,7 +12,7 @@ from typing import Union
 
 class MELDDataset(Dataset):
     def __init__(self, csv_path: Union[Path, str], video_dir: Union[Path, str]) -> None:
-        self.data = pd.read_csv(Path(csv_path))
+        self.data = pd.read_csv(csv_path)
         
         self.video_dir = Path(video_dir)
         self.tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')

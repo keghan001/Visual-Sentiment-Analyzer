@@ -39,7 +39,7 @@ def main():
     #Ffmpeg install
     if not install_ffmpeg():
         print("FFmpeg installation failed! cannot continue training.")
-        sys.exit()
+        sys.exit(1)
     
     print("Available audio backends: ")
     print(str(torchaudio.list_audio_backends()))
@@ -55,11 +55,11 @@ def main():
         print(f"Initial GPU memory used: {memory_used:.2f} GB")
         
     train_loader, dev_loader, test_loader = prepare_dataloaders(
-        train_csv=os.path.join(args.train_dir, 'train_sent_emo_csv'),
+        train_csv=os.path.join(args.train_dir, 'train_sent_emo.csv'),
         train_video_dir=os.path.join(args.train_dir, 'train_splits'),
-        dev_csv=os.path.join(args.val_dir, 'dev_sent_emo_csv'),
+        dev_csv=os.path.join(args.val_dir, 'dev_sent_emo.csv'),
         dev_video_dir=os.path.join(args.val_dir, 'dev_splits_complete'),
-        test_csv=os.path.join(args.test_dir, 'test_sent_emo_csv'),
+        test_csv=os.path.join(args.test_dir, 'test_sent_emo.csv'),
         test_video_dir=os.path.join(
             args.test_dir, 'output_repeated_splits_test'),
         batch_size=args.batch_size
