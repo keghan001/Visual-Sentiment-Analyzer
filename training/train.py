@@ -16,21 +16,21 @@ SM_CHANNEL_TRAINING = os.environ.get(
     'SM_CHANNEL_TRAINING', "/opt/ml/input/data/training")
 SM_CHANNEL_VALIDATION = os.environ.get(
     'SM_CHANNEL_VALIDATION', "/opt/ml/input/data/validation")
-SM_CHANNEL_TESTING = os.environ.get(
-    'SM_CHANNEL_TESTING', "/opt/ml/input/data/validation")
+SM_CHANNEL_TEST = os.environ.get(
+    'SM_CHANNEL_TEST', "/opt/ml/input/data/test")
 
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = "expandable_segments:True"
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=20)
-    parser.add_argument("--batch-size", type=int, default=20)
+    parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, default=0.001)
     
     #Data directories
     parser.add_argument("--train-dir", type=str, default=SM_CHANNEL_TRAINING)
     parser.add_argument("--val-dir", type=str, default=SM_CHANNEL_VALIDATION)
-    parser.add_argument("--test-dir", type=str, default=SM_CHANNEL_TESTING)
+    parser.add_argument("--test-dir", type=str, default=SM_CHANNEL_TEST)
     parser.add_argument("--model-dir", type=str, default=SM_MODEL_DIR)
     
     return parser.parse_args()
@@ -65,10 +65,11 @@ def main():
         batch_size=args.batch_size
     )
     
-    print(f"Training CSV path: {os.path.join(
-        args.train_dir, 'train_sent_emo.csv')}")
-    print(f"Training video path: {os.path.join(
-        args.train_dir, 'train_splits')}")
+    # print(f"Training CSV path: {os.path.join(
+    #     args.train_dir, 'train_sent_emo.csv')}")
+    
+    # print(f"Training video path: {os.path.join(
+    #     args.train_dir, 'train_splits')}")
     
     model = MultimodalSentimentModel().to(device)
     trainer = MultimodalTrainer(model, train_loader, dev_loader)

@@ -10,7 +10,7 @@ def start_training():
     )
     
     load_dotenv()
-    
+
     estimator = PyTorch(
         entry_point="train.py",
         source_dir="training",
@@ -20,8 +20,8 @@ def start_training():
         instance_count=1,
         instance_type="ml.g5.xlarge",
         hyperparameters={
-            "batch_size": str(32),
-            "epochs": str(25)
+            "batch-size": "32",
+            "epochs": "25"
         },
         tensorboard_config=tsboard_config
     )
@@ -32,6 +32,7 @@ def start_training():
         "validation": "s3://sentiment-analyzer-saas/dataset/dev",
         "test": "s3://sentiment-analyzer-saas/dataset/test"
     })
+
 
 
 if __name__ == "__main__":
