@@ -79,7 +79,8 @@ def main():
     metrics_data = {
         'train_losses': [],
         'val_losses': [],
-        'epochs': []
+        'epochs': [],
+        'test_loss': 0
     }
     
     for epoch in tqdm(range(args.epochs), desc="Epochs"):
@@ -122,7 +123,7 @@ def main():
     #After training is complete, evaluate on test set
     print("Evaluating on test set...")
     test_loss, test_metrics = trainer.validate(test_loader, phase="test")
-    metrics_data['val_losses'].append(test_loss["total"])
+    metrics_data['test_loss'].append(test_loss["total"])
     
     print(json.dumps({
             "metrics": [
