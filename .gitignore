@@ -6,3 +6,7 @@ dataset/*
 training/__pycache__
 runs/
 .env
+
+# Deployment files
+deployment/model/model.pth
+deployment/model_normalized/model.pth
