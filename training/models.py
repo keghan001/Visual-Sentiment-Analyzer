@@ -179,7 +179,7 @@ class MultimodalTrainer():
             patience=2
         )
         
-        self.current_train_losses = {'total': 0, 'emotion': 0, 'sentiment': 0}
+        self.current_train_losses = None
         
         # Label smoothing to optimize generalization
         self.emotion_criterion = nn.CrossEntropyLoss(
@@ -198,17 +198,17 @@ class MultimodalTrainer():
             self.current_train_losses = losses
         else: # Validation phase
             self.writer.add_scalar(
-                'loss/total/train', self.current_train_losses['total'], self.global_step)
+                'loss/total/train', self.current_train_losses['total'], self.global_step) #type:ignore
             self.writer.add_scalar(
                 'loss/total/val', losses['total'], self.global_step)
             
             self.writer.add_scalar(
-                'loss/emotion/train', self.current_train_losses['emotion'], self.global_step)
+                'loss/emotion/train', self.current_train_losses['emotion'], self.global_step) #type:ignore
             self.writer.add_scalar(
                 'loss/emotion/val', losses['emotion'], self.global_step)
             
             self.writer.add_scalar(
-                'loss/sentiment/train', self.current_train_losses['sentiment'], self.global_step)
+                'loss/sentiment/train', self.current_train_losses['sentiment'], self.global_step) #type:ignore
             self.writer.add_scalar(
                 'loss/sentiment/val', losses['sentiment'], self.global_step)
         
@@ -269,7 +269,7 @@ class MultimodalTrainer():
             self.log_metrics({
                 'total': total_loss.item(),
                 'emotion': emotion_loss.item(),
-                'sentiment_loss': sentiment_loss.item()
+                'sentiment': sentiment_loss.item()
             })
             
             self.global_step += 1
@@ -302,18 +302,18 @@ class MultimodalTrainer():
                 
                 # Calculating losses using raw logits
                 emotion_loss = self.emotion_criterion(
-                    outputs['emotion'], emotion_labels)
+                    outputs['emotions'], emotion_labels)
                 sentiment_loss = self.sentiment_criterion(
-                    outputs['sentiment'], sentiment_labels)
+                    outputs['sentiments'], sentiment_labels)
                 total_loss = emotion_loss + sentiment_loss
 
                 all_emotion_preds.extend(
-                    outputs['emotions'].argmax(dim=1).gpu().numpy())
-                all_emotion_labels.extend(emotion_labels.gpu().numpy())
+                    outputs['emotions'].argmax(dim=1).cpu().numpy())
+                all_emotion_labels.extend(emotion_labels.cpu().numpy())
                 
                 all_sentiment_preds.extend(
-                    outputs['sentiment'].argmax(dim=1).gpu().numpy())
-                all_sentiment_labels.extend(emotion_labels.gpu().numpy())
+                    outputs['sentiments'].argmax(dim=1).cpu().numpy())
+                all_sentiment_labels.extend(emotion_labels.cpu().numpy())
                 
                 # Track losses
                 losses['total'] += total_loss.item()

@@ -122,7 +122,7 @@ def main():
     #After training is complete, evaluate on test set
     print("Evaluating on test set...")
     test_loss, test_metrics = trainer.validate(test_loader, phase="test")
-    metrics_data['test_loss'].append(test_loss["total"])
+    metrics_data['val_losses'].append(test_loss["total"])
     
     print(json.dumps({
             "metrics": [

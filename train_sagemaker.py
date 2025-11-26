@@ -1,5 +1,5 @@
-from sagemaker.pytorch import PyTorch
-from sagemaker.debugger import TensorBoardOutputConfig
+from sagemaker.pytorch import PyTorch #type:ignore
+from sagemaker.debugger import TensorBoardOutputConfig #type:ignore
 from dotenv import load_dotenv
 import os
 
