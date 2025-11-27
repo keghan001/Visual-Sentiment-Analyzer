@@ -10,3 +10,4 @@ runs/
 # Deployment files
 deployment/model/model.pth
 deployment/model_normalized/model.pth
+deployment/anger.mp4

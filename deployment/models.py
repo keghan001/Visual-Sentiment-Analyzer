@@ -66,7 +66,7 @@ class AudioEncoder(nn.Module):
         for param in self.conv_layers.parameters():
             param.requires_grad = False
         
-        self.proj_layers = nn.Sequential(
+        self.projection = nn.Sequential(
             nn.Linear(128, 128),
             nn.ReLU(),
             nn.Dropout(0.2)
@@ -78,7 +78,7 @@ class AudioEncoder(nn.Module):
         features = self.conv_layers(x)
         # Features output: [batch_size, 128, 1]
         
-        return self.proj_layers(features.squeeze(-1))
+        return self.projection(features.squeeze(-1))
 
 
 class MultimodalSentimentModel(nn.Module):
