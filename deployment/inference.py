@@ -147,3 +147,117 @@ class VideoUtteranceProcessor:
         
         return segment_path
 
+def model_fn(model_dir):
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu")
+    model = MultimodalSentimentModel()
+    
+    model_path = Path() / model_dir / "model.pth"
+    
+    if not model_path.exists():
+        model_path = model_dir / "model" / "model.pth"
+        if not model_path.exists():
+            raise FileNotFoundError(f"Model file not found in dir {model_path}")
+    
+    print(f"Loading model from path {model_path}")
+    model.load_state_dict(torch.load(str(model_path), map_location=device, weights_only=True))
+    model.eval()
+    
+    return {
+        "model": model,
+        "tokenizer": AutoTokenizer.from_pretrained('bert-base-uncased'),
+        "transcriber": whisper.load_model(
+            "base",
+            device = "cpu",
+        ),
+        "device": device
+    }
+
+def predict_fn(input_data, model_dict):
+    model = model_dict['model']
+    tokenizer = model_dict['tokenizer']
+    device = model_dict['device']
+    video_path = input_data['video_path']
+    
+    result = model_dict['transcriber'].transcribe(video_path, 
+        word_timestamps=True)
+    
+    utterance_proc = VideoUtteranceProcessor(video_path)
+    predictions = []
+    
+    for segment in result['segments']:
+        try:
+            segment_path = utterance_proc.extract_segment(
+                segment['start'], segment['end'])
+        
+            
+            video_frames = utterance_proc.video_proc.process_video(segment_path)
+            audio_features = utterance_proc.audio_proc.process_audio(segment_path)
+            text_inputs = tokenizer(
+                segment['text'],
+                padding="max_length",
+                truncation=True,
+                max_length=128,
+                return_tensors='pt'
+            )
+            
+            #Move to device
+            text_inputs = {k: v.to(device) for k, v in text_inputs.items()}
+            video_frames = video_frames.unsqueeze(0).to(device)
+            audio_features = audio_features.unsqueeze(0).to(device)
+            
+            # Get predictions
+            with torch.inference_mode():
+                outputs = model(text_inputs, video_frames, audio_features)
+                emotion_probs = torch.softmax(outputs["emotions"], dim=1)[0]
+                sentiment_probs = torch.softmax(outputs["sentiments"], dim=1)[0]
+                
+                emotion_values, emotion_indeces = torch.topk(emotion_probs, 3)
+                sentiment_values, sentiment_indeces = torch.topk(sentiment_probs, 3)
+                
+                predictions.append({
+                    "start_time": segment["start"],
+                    "end_time": segment["end"],
+                    "text": segment["text"],
+                    "emotions": [
+                        {"label": EMOTION_MAP[int(idx.item())], "confidence": conf.item()} for idx, conf in zip(emotion_indeces, emotion_values)
+                    ],
+                    "sentiments": [
+                        {"label": SENTIMENT_MAP[int(idx.item())], "confidence": conf.item()} for idx, conf in zip(sentiment_indeces, sentiment_values)
+                    ]
+                })
+
+        except Exception as e:
+            print(f"Segment failed inference: {e}")
+        finally:
+            if Path(segment_path).exists():
+                Path(segment_path).unlink()
+                
+    return predictions
+
+def process_local_video(video_path, model_dir="model_normalized"):
+    model_dict = model_fn(model_dir)
+    
+    input_data = {"video_path": video_path}
+    
+    predictions = predict_fn(input_data, model_dict)
+    
+    for utterance in predictions:
+        print("\nUtterance:")
+        print(f"Start: {utterance["start_time"]}s, End{
+            utterance["end_time"]}s")
+        print(f"Text: {utterance["text"]}")
+        print("\nTop Emotions:")
+        for emotion in utterance["emotions"]:
+            print(f"{emotion["label"]}: {emotion["confidence"]:.2f}")
+        print("\nTop Emotions:")
+        for sentiment in utterance["sentiments"]:
+            print(f"{sentiment["label"]}: {sentiment["confidence"]:.2f}")
+        print("--"*50)
+
+def main():
+    process_local_video("joy.mp4")
+
+if __name__ == "__main__":
+    main()
+    
